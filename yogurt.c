@@ -17,6 +17,7 @@
 
 struct thermo_probe {
     struct max31855_dev dev ALIGN(8);
+    bool changed;
     bool enabled;
     bool temp_showing;
     int line;
@@ -71,7 +72,7 @@ void redraw_display(void)
     /* Check if we need to redraw the Wifi network status */
     if (true == wifi_changed) {
         /* Draw the top line, inverted */
-        sh1106_clear_page(0, true);
+        sh1106_clear_page(0, true, 0);
         sh1106_display_puts(0, 102, "WiFi", true, SH1106_TEXT_ALIGN_RIGHT);
 
         if (STATION_GOT_IP == wifi_last_status) {
@@ -104,41 +105,42 @@ void redraw_display(void)
     for (int i = 0; i < ARRAY_LEN(thermo_devs); i++) {
         struct thermo_probe *probe = &thermo_devs[i];
 
-        if (false == probe->enabled) {
+        /* Probe attributes changed */
+        if (true == probe->changed) {
             /* Display message indicating probe is not active */
-            os_sprintf(temp_str, "Probe %d Inactive", i + 1);
+            os_sprintf(temp_str, "Probe %d: ", i + 1);
             temp_str[31] = '\0';
-            sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_CENTER);
-        } else {
+            sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_LEFT);
+            if (false == probe->enabled) {
+                sh1106_display_puts(probe->line, 0, "Inactive", false, SH1106_TEXT_ALIGN_RIGHT);
+                probe->changed = false;
+            }
+        }
+
+        if (true == probe->enabled) {
             struct max31855_dev *dev = &probe->dev;
+
             if (0 == dev->flags) {
                 if (false == probe->temp_showing) {
-                    sh1106_clear_page(probe->line, false);
-                    os_sprintf(temp_str, "Probe %d", i + 1);
-                    temp_str[31] = '\0';
-                    sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_LEFT);
+                    sh1106_clear_page(probe->line, false, 64);
                 }
 
-                os_sprintf(temp_str, "%u.%02u00" "\xb0" "C", dev->probe_temp >> 2, (dev->probe_temp & 0x3) * 25);
+                os_sprintf(temp_str, "%u.%02u" "\xb0" "C", dev->probe_temp >> 2, (dev->probe_temp & 0x3) * 25);
                 temp_str[31] = '\0';
                 sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_RIGHT);
 
                 probe->temp_showing = true;
             } else {
                 if (true == probe->temp_showing) {
-                    sh1106_clear_page(probe->line, false);
+                    sh1106_clear_page(probe->line, false, 64);
                 }
 
-                sh1106_clear_page(probe->line, false);
                 if (dev->flags & MAX31855_FLAG_NO_PROBE) {
-                    os_sprintf(temp_str, "Probe %d Disconnected", i + 1);
-                    temp_str[31] = '\0';
-                    sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_CENTER);
+                    sh1106_display_puts(probe->line, 0, "Disconnected", false, SH1106_TEXT_ALIGN_RIGHT);
                 } else {
-                    os_sprintf(temp_str, "Probe %d: %s Short", i + 1, dev->flags & MAX31855_FLAG_SHORT_GND ?
-                            "Ground" : "Vcc");
+                    os_sprintf(temp_str, "%s Short", dev->flags & MAX31855_FLAG_SHORT_GND ? "Ground" : "Vcc");
                     temp_str[31] = '\0';
-                    sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_CENTER);
+                    sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_RIGHT);
                 }
 
                 probe->temp_showing = false;
@@ -218,6 +220,7 @@ int setup_temp_probe(int id, bool enable, int csn_id)
     probe->enabled = enable;
     probe->line = 2 + id;
     probe->temp_showing = false;
+    probe->changed = true;
 
     if (true == enable) {
         if (0 != max31855_init(&probe->dev, MAX31855_SPI_IFACE, csn_id)) {

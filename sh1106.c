@@ -121,7 +121,7 @@ void sh1106_display_set_invert(bool invert)
 }
 
 ICACHE_FLASH_ATTR
-void sh1106_clear_page(int page, bool invert)
+void sh1106_clear_page(int page, bool invert, int start_col)
 {
     uint32_t data[(OLED_WIDTH + 31)/32],
              page_cmd = SH1106_CMD_SET_PAGE_ADDR(page);
@@ -129,10 +129,10 @@ void sh1106_clear_page(int page, bool invert)
     memset(data, invert ? 0xff : 0x0, sizeof(data));
 
     _spi_write_command(&page_cmd, 1);
-    _sh1106_set_start_column(2);
+    _sh1106_set_start_column(start_col + 2);
 
     for (int i = 0; i < OLED_HEIGHT/8; i++) {
-        _spi_write_display(data, sizeof(data));
+        _spi_write_display(data, (OLED_WIDTH - start_col)/8);
     }
 }
 
@@ -140,7 +140,7 @@ ICACHE_FLASH_ATTR
 void sh1106_display_clear(void)
 {
     for (int i = 0; i < 8; i++) {
-        sh1106_clear_page(i, false);
+        sh1106_clear_page(i, false, 0);
     }
 }
 
@@ -186,13 +186,13 @@ void sh1106_display_puts(unsigned line, unsigned x_offs, const char *str, bool i
     } else {
         switch (align) {
         case SH1106_TEXT_ALIGN_RIGHT:
-            x_start = 128 - 2 - (len * 6);
+            x_start = 128 - (len * 6);
             break;
         case SH1106_TEXT_ALIGN_CENTER:
             x_start = 64 - ((len * 6)/2);
             break;
         case SH1106_TEXT_ALIGN_LEFT:
-            x_start = 4;
+            x_start = 2;
             break;
         case SH1106_TEXT_ALIGN_USER:
         default:
@@ -201,7 +201,7 @@ void sh1106_display_puts(unsigned line, unsigned x_offs, const char *str, bool i
     }
 
     _spi_write_command(&page_cmd, 1);
-    _sh1106_set_start_column(x_start);
+    _sh1106_set_start_column(x_start + 2);
 
     while ('\0' != *pstr) {
         _sh1106_display_putc(*pstr++, invert);

@@ -18,5 +18,5 @@ void sh1106_display_reset(void);
 
 void sh1106_display_set_invert(bool invert);
 void sh1106_display_puts(unsigned line, unsigned x_offs, const char *str, bool invert, enum sh1106_text_align align);
-void sh1106_clear_page(int page, bool invert);
+void sh1106_clear_page(int page, bool invert, int start_col);
 void sh1106_display_clear(void);
