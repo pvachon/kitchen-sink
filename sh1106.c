@@ -189,10 +189,10 @@ void sh1106_display_puts(unsigned line, unsigned x_offs, const char *str, bool i
             x_start = 128 - 2 - (len * 6);
             break;
         case SH1106_TEXT_ALIGN_CENTER:
-            x_start = 128 - 2 - ((len * 6)/2);
+            x_start = 64 - ((len * 6)/2);
             break;
         case SH1106_TEXT_ALIGN_LEFT:
-            x_start = 2;
+            x_start = 4;
             break;
         case SH1106_TEXT_ALIGN_USER:
         default:

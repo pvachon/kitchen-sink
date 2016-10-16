@@ -7,6 +7,7 @@
 
 #define MAX31855_OK                 0x0
 #define MAX31855_PROBE_FAULT        0x1
+#define MAX31855_BAD_ARGS           0x2
 
 #define MAX31855_FLAG_NO_PROBE      0x1
 #define MAX31855_FLAG_SHORT_GND     0x2
@@ -29,6 +30,11 @@ struct max31855_dev {
     uint8_t flags;
 
     /**
+     * Padding
+     */
+    uint8_t _padding;
+
+    /**
      * The last measured probe temperature. Not valid if flags != 0
      */
     uint32_t probe_temp;
@@ -39,27 +45,28 @@ struct max31855_dev {
     uint32_t int_temp;
 };
 
+#define MAX31855_GET_PROBE_TEMP(_dev)       ((_dev)->probe_temp)
+#define MAX31855_GET_INTERNAL_TEMP(_dev)    ((_dev)->internal_temp)
+
 /**
  * Initialize a MAX31855 Status structure.
  *
  * \param dev The status structure to be initialized
  * \param spi_bus The SPI bus ID to use
  * \param csn_gpio The GPIO ID for the chip select.
+ *
+ * \return MAX31855_OK if the values are correct, MAX31855_BAD_ARGS if not.
  */
-void max31855_init(struct max31855_dev *dev, unsigned spi_bus, unsigned csn_gpio);
+int max31855_init(struct max31855_dev *dev, unsigned spi_bus, unsigned csn_gpio);
 
 /**
  * Read the temperature from the attached MAX31855. Any parameters you're not interested
  * in can be set to NULL.
  *
- * \param probe_temp The probe temerature, in millidegrees celsius
- * \param internal_temp The internal temperature, in millidegrees celsius
- * \param no_probe Boolean. Set to true if no probe is present.
- * \param short_ground Boolean. Set to true if the probe connector is shorted to ground.
- * \param short_vcc Boolean. Set to true if the probe connector is shorted to Vcc.
+ * \param dev The MAX31855 device to act on.
  *
  * \return MAX31855_OK if the values read are correct, MAX31855_PROBE_FAULT if there is an
  *         error with the probe configuration.
  */
-int max31855_read(uint32_t *probe_temp, uint32_t *internal_temp, bool *no_probe, bool *short_ground, bool *short_vcc);
+int max31855_read(struct max31855_dev *dev);
 

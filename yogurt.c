@@ -12,23 +12,21 @@
 
 #include <stdint.h>
 
+#define ARRAY_LEN(x) (sizeof((x))/sizeof((x[0])))
+#define ALIGN(x)        __attribute__((aligned((x))))
+
+struct thermo_probe {
+    struct max31855_dev dev ALIGN(8);
+    bool enabled;
+    bool temp_showing;
+    int line;
+} ALIGN(4);
+
 static volatile
 os_timer_t temp_timer;
 
 static
-uint32_t probe_temp = 0;
-
-static
-uint32_t int_temp = 0;
-
-static
-bool no_probe = false;
-
-static
-bool short_vcc = false;
-
-static
-bool short_ground = false;
+struct thermo_probe thermo_devs[2] ALIGN(4);
 
 static
 bool wifi_connected = false;
@@ -38,9 +36,6 @@ bool wifi_changed = false;
 
 static
 int wifi_last_status = STATION_IDLE;
-
-static
-bool temp_showing = false;
 
 static
 char ssid[32] = "SiprExtend",
@@ -71,15 +66,16 @@ void setup_wifi_interface(void)
 static ICACHE_FLASH_ATTR
 void redraw_display(void)
 {
-    char temp_str[16];
+    char temp_str[32];
 
+    /* Check if we need to redraw the Wifi network status */
     if (true == wifi_changed) {
         /* Draw the top line, inverted */
         sh1106_clear_page(0, true);
         sh1106_display_puts(0, 102, "WiFi", true, SH1106_TEXT_ALIGN_RIGHT);
 
         if (STATION_GOT_IP == wifi_last_status) {
-            sh1106_display_puts(0, 2, ssid, true, SH1106_TEXT_ALIGN_LEFT);
+            sh1106_display_puts(0, 0, ssid, true, SH1106_TEXT_ALIGN_LEFT);
         } else {
             switch (wifi_last_status) {
             case STATION_IDLE:
@@ -105,37 +101,51 @@ void redraw_display(void)
         wifi_changed = false;
     }
 
-    if (false == no_probe && false == short_vcc && false == short_ground) {
-        if (false == temp_showing) {
-            sh1106_clear_page(2, false);
-            sh1106_clear_page(3, false);
-            sh1106_display_puts(2, 2, "Therm 1:", false, SH1106_TEXT_ALIGN_LEFT);
-            sh1106_display_puts(3, 2, "Calib:", false, SH1106_TEXT_ALIGN_LEFT);
-        }
+    for (int i = 0; i < ARRAY_LEN(thermo_devs); i++) {
+        struct thermo_probe *probe = &thermo_devs[i];
 
-        os_sprintf(temp_str, "%u.%02u00" "\xb0" "C", probe_temp >> 2, (probe_temp & 0x3) * 25);
-        temp_str[15] = '\0';
-        sh1106_display_puts(2, 0, temp_str, false, SH1106_TEXT_ALIGN_RIGHT);
-
-        os_sprintf(temp_str, "%u.%04u" "\xb0" "C", int_temp >> 4, (int_temp & 0xf) * 625);
-        temp_str[15] = '\0';
-        sh1106_display_puts(3, 0, temp_str, false, SH1106_TEXT_ALIGN_RIGHT);
-        temp_showing = true;
-    } else {
-        if (true == temp_showing) {
-            sh1106_clear_page(2, false);
-            sh1106_clear_page(3, false);
-        }
-
-        sh1106_clear_page(3, false);
-        if (true == no_probe) {
-            sh1106_display_puts(3, 0, "Connect Probe", false, SH1106_TEXT_ALIGN_CENTER);
+        if (false == probe->enabled) {
+            /* Display message indicating probe is not active */
+            os_sprintf(temp_str, "Probe %d Inactive", i + 1);
+            temp_str[31] = '\0';
+            sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_CENTER);
         } else {
-            sh1106_display_puts(3, 0, "Probe Error", false, SH1106_TEXT_ALIGN_CENTER);
-        }
+            struct max31855_dev *dev = &probe->dev;
+            if (0 == dev->flags) {
+                if (false == probe->temp_showing) {
+                    sh1106_clear_page(probe->line, false);
+                    os_sprintf(temp_str, "Probe %d", i + 1);
+                    temp_str[31] = '\0';
+                    sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_LEFT);
+                }
 
-        temp_showing = false;
+                os_sprintf(temp_str, "%u.%02u00" "\xb0" "C", dev->probe_temp >> 2, (dev->probe_temp & 0x3) * 25);
+                temp_str[31] = '\0';
+                sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_RIGHT);
+
+                probe->temp_showing = true;
+            } else {
+                if (true == probe->temp_showing) {
+                    sh1106_clear_page(probe->line, false);
+                }
+
+                sh1106_clear_page(probe->line, false);
+                if (dev->flags & MAX31855_FLAG_NO_PROBE) {
+                    os_sprintf(temp_str, "Probe %d Disconnected", i + 1);
+                    temp_str[31] = '\0';
+                    sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_CENTER);
+                } else {
+                    os_sprintf(temp_str, "Probe %d: %s Short", i + 1, dev->flags & MAX31855_FLAG_SHORT_GND ?
+                            "Ground" : "Vcc");
+                    temp_str[31] = '\0';
+                    sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_CENTER);
+                }
+
+                probe->temp_showing = false;
+            }
+        }
     }
+
 }
 
 static ICACHE_FLASH_ATTR
@@ -179,21 +189,46 @@ void sample_temperature(void *arg)
     /* Check the status of Wifi before we move along */
     check_wifi();
 
-    if (MAX31855_PROBE_FAULT == max31855_read(&probe_temp, &int_temp, &no_probe, &short_ground, &short_vcc)) {
-        if (no_probe) {
-            os_printf("ERROR: no probe present.\r\n");
-        }
+    for (int i = 0; i < ARRAY_LEN(thermo_devs); i++) {
+        struct thermo_probe *dev = &thermo_devs[i];
 
-        if (short_ground) {
-            os_printf("ERROR: short to ground detected.\r\n");
+        os_printf("Reading device %d\r\n", i);
+        if (true == dev->enabled) {
+            max31855_read(&dev->dev);
         }
-
-        if (short_vcc) {
-            os_printf("ERROR: short to Vcc detected.\r\n");
-        }
+        os_printf("read done!\r\n");
     }
 
     redraw_display();
+}
+
+static ICACHE_FLASH_ATTR
+int setup_temp_probe(int id, bool enable, int csn_id)
+{
+    int status = 0;
+    struct thermo_probe *probe = NULL;
+
+    if (id >= ARRAY_LEN(thermo_devs)) {
+        status = -1;
+        os_printf("ERROR: Probe %d is not configured to exist.\r\n", id);
+        goto done;
+    }
+
+    probe = &thermo_devs[id];
+    probe->enabled = enable;
+    probe->line = 2 + id;
+    probe->temp_showing = false;
+
+    if (true == enable) {
+        if (0 != max31855_init(&probe->dev, MAX31855_SPI_IFACE, csn_id)) {
+            os_printf("ERROR: Failed to initialize probe %d state\r\n", id);
+            status = -1;
+            goto done;
+        }
+    }
+
+done:
+    return status;
 }
 
 ICACHE_FLASH_ATTR
@@ -236,6 +271,9 @@ void user_init(void)
     PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
     gpio_output_set(0, 0, (1 << MAX31855_SPI_CSN), 0);
     gpio_output_set((1 << MAX31855_SPI_CSN), 0, 0, 0);
+
+    setup_temp_probe(0, true, MAX31855_SPI_CSN);
+    setup_temp_probe(1, false, 0);
 
     /* Configure the chip selects for the SH1106 */
     PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO4_U, FUNC_GPIO4);    /* Chip select */
