@@ -9,6 +9,7 @@
 #include "c99_fixups.h"
 #include "max31855.h"
 #include "sh1106.h"
+#include "http_client.h"
 
 #include <stdint.h>
 
@@ -27,6 +28,9 @@ static volatile
 os_timer_t temp_timer;
 
 static
+struct http_client http_cl = { .state = HTTP_CLIENT_IDLE };
+
+static
 struct thermo_probe thermo_devs[2] ALIGN(4);
 
 static
@@ -38,10 +42,19 @@ bool wifi_changed = false;
 static
 int wifi_last_status = STATION_IDLE;
 
+/* Backoff for HTTP server TCP connection */
+static
+int backoff = 0;
+
+#define MAX_BACKOFF     20
+
 static
 char ssid[32] = "SiprExtend",
      psk[64] = "lolnsaownsyou";
 
+/**
+ * Setup the wifi interface parameters, and initiate a connection to the STA.
+ */
 static ICACHE_FLASH_ATTR
 void setup_wifi_interface(void)
 {
@@ -59,6 +72,49 @@ void setup_wifi_interface(void)
     }
 }
 
+/**
+ * Set up the HTTP client connection, and periodically check its status.
+ *
+ * Attempt to automatically reconnect if the connection to the service failed.
+ */
+static ICACHE_FLASH_ATTR
+void check_http_client_conn(void)
+{
+    ip_addr_t addr;
+
+    if (HTTP_CLIENT_CONNECTED == http_cl.state || HTTP_CLIENT_CONNECTING == http_cl.state) {
+        /* Nothing to do here */
+        return;
+    }
+
+    if (HTTP_CLIENT_IDLE == http_cl.state || MAX_BACKOFF == backoff) {
+        IP4_ADDR(&addr, 172, 16, 1, 1);
+        if (0 != http_client_connect(&http_cl, addr.addr, 24666)) {
+            os_printf("Network connection failure, skipping.\r\n");
+        }
+        backoff = 0;
+    } else {
+        if (0 == backoff) {
+            os_printf("Waiting 10s before retrying connection...\r\n");
+        }
+        backoff++;
+    }
+}
+
+static
+char message[256];
+
+/**
+ * Send a temperature update to the remote service
+ */
+static ICACHE_FLASH_ATTR
+void update_service(void)
+{
+}
+
+/**
+ * Update the information displayed on the OLED.
+ */
 static ICACHE_FLASH_ATTR
 void redraw_display(void)
 {
@@ -124,8 +180,6 @@ void redraw_display(void)
                 temp_str[31] = '\0';
                 sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_RIGHT);
 
-                os_printf("DEBUG: Temperature: %s\r\n", temp_str);
-
                 probe->temp_showing = true;
             } else {
                 if (true == probe->temp_showing) {
@@ -147,6 +201,9 @@ void redraw_display(void)
 
 }
 
+/**
+ * Check and update the status of the Wifi connection. If the status indicates we're not connected, attempt to force a reconnect.
+ */
 static ICACHE_FLASH_ATTR
 void check_wifi(void)
 {
@@ -182,6 +239,10 @@ void check_wifi(void)
     }
 }
 
+/**
+ * The meat of our polling loop. Check the wifi, sample the temperature from the thermocouples, and send
+ * a message out.
+ */
 static ICACHE_FLASH_ATTR
 void sample_temperature(void *arg)
 {
@@ -196,9 +257,24 @@ void sample_temperature(void *arg)
         }
     }
 
+    /* Check our HTTP connection status if WiFi is up */
+    if (STATION_GOT_IP == wifi_last_status) {
+        check_http_client_conn();
+    }
+
+    update_service();
     redraw_display();
 }
 
+/**
+ * Set up the specified temperature probe, so we can talk to the MAX31855.
+ *
+ * \param id The internal ID used for this temperature probe
+ * \param enable Whether or not to mark this temperature probe as enabled
+ * \param csn_id The ID of the GPIO to be used as a chip select.
+ *
+ * \return 0 on success, a non-zero error code otherwise.
+ */
 static ICACHE_FLASH_ATTR
 int setup_temp_probe(int id, bool enable, int csn_id)
 {
@@ -229,6 +305,9 @@ done:
     return status;
 }
 
+/**
+ * Initialization entry point.
+ */
 ICACHE_FLASH_ATTR
 void user_init(void)
 {
@@ -236,6 +315,7 @@ void user_init(void)
 
     /* Initialize the UART */
     uart_init(BIT_RATE_115200, BIT_RATE_115200);
+    os_delay_us(100);
 
     /*
      * Initialize the GPIO subsystem

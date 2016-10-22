@@ -1,7 +1,8 @@
 TARGET=yogurt
 OBJ=yogurt.o \
 	max31855.o \
-	sh1106.o
+	sh1106.o \
+	http_client.o
 
 CROSS_COMPILE=xtensa-lx106-elf-
 OFLAGS=-O2 -g

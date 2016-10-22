@@ -12,4 +12,5 @@ size_t ets_strlen(const char *s);
 void ets_timer_arm_new(ETSTimer *a, int b, int c, int isMstimer);
 void ets_timer_disarm(ETSTimer *a);
 void ets_timer_setfn(ETSTimer *t, ETSTimerFunc *fn, void *parg);
+void ets_delay_us(long us);
 
