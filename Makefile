@@ -22,7 +22,7 @@ $(TARGET)-0x00000.bin: $(TARGET)
 $(TARGET): $(OBJ)
 
 flash: $(TARGET)-0x00000.bin
-	esptool.py write_flash 0 $(TARGET)-0x00000.bin 0x40000 $(TARGET)-0x40000.bin
+	esptool.py --baud 576000 write_flash 0 $(TARGET)-0x00000.bin 0x40000 $(TARGET)-0x40000.bin
 
 clean:
 	rm -f $(TARGET) $(OBJ) $(TARGET)-0x00000.bin $(TARGET)-0x40000.bin

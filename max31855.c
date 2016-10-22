@@ -79,11 +79,8 @@ int max31855_read(struct max31855_dev *dev)
 
     v = _max31855_spi_read(dev);
 
-    os_printf("Clear flags\r\n");
-
     dev->flags = 0;
 
-    os_printf("Set flags\r\n");
     if ((MAX31855_OC_BIT & v)) {
         dev->flags |= MAX31855_FLAG_NO_PROBE;
         status = MAX31855_PROBE_FAULT;
@@ -99,11 +96,8 @@ int max31855_read(struct max31855_dev *dev)
         status = MAX31855_PROBE_FAULT;
     }
 
-    os_printf("Set probe temp\r\n");
     dev->probe_temp = MAX31855_THERMO_TEMP(v);
-    os_printf("Set internal temp\r\n");
     dev->int_temp = MAX31855_INTERNAL_TEMP(v);
-    os_printf("Done.\r\n");
 
     return status;
 }

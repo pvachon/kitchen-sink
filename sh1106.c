@@ -186,7 +186,7 @@ void sh1106_display_puts(unsigned line, unsigned x_offs, const char *str, bool i
     } else {
         switch (align) {
         case SH1106_TEXT_ALIGN_RIGHT:
-            x_start = 128 - (len * 6);
+            x_start = 128 - (len * 6) - 2;
             break;
         case SH1106_TEXT_ALIGN_CENTER:
             x_start = 64 - ((len * 6)/2);

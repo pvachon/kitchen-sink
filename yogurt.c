@@ -47,11 +47,6 @@ void setup_wifi_interface(void)
 {
     struct station_config wifi_sta_cfg;
 
-    /* Fire up the wifi interface */
-    ETS_UART_INTR_DISABLE();
-    wifi_set_opmode(STATION_MODE);
-    ETS_UART_INTR_ENABLE();
-
     os_memcpy(&wifi_sta_cfg.ssid, ssid, 32);
     os_memcpy(&wifi_sta_cfg.password, psk, 64);
     wifi_sta_cfg.bssid_set = 0;
@@ -60,7 +55,7 @@ void setup_wifi_interface(void)
     os_printf("WIFI: SSID=%s PSK=%s\r\n", wifi_sta_cfg.ssid, wifi_sta_cfg.password);
 
     if (true == wifi_station_connect()) {
-        os_printf("WIFI: Connected.\r\n");
+        os_printf("WIFI: Connecting.\r\n");
     }
 }
 
@@ -129,6 +124,8 @@ void redraw_display(void)
                 temp_str[31] = '\0';
                 sh1106_display_puts(probe->line, 0, temp_str, false, SH1106_TEXT_ALIGN_RIGHT);
 
+                os_printf("DEBUG: Temperature: %s\r\n", temp_str);
+
                 probe->temp_showing = true;
             } else {
                 if (true == probe->temp_showing) {
@@ -194,11 +191,9 @@ void sample_temperature(void *arg)
     for (int i = 0; i < ARRAY_LEN(thermo_devs); i++) {
         struct thermo_probe *dev = &thermo_devs[i];
 
-        os_printf("Reading device %d\r\n", i);
         if (true == dev->enabled) {
             max31855_read(&dev->dev);
         }
-        os_printf("read done!\r\n");
     }
 
     redraw_display();
@@ -251,6 +246,11 @@ void user_init(void)
      * Print a welcome message
      */
     os_printf("Yogurt Monitor is Starting...\r\n");
+
+    /* Fire up the wifi interface */
+    ETS_UART_INTR_DISABLE();
+    wifi_set_opmode(STATION_MODE);
+    ETS_UART_INTR_ENABLE();
 
     /* Set up the GPIOs for the hardware SPI */
     WRITE_PERI_REG(PERIPHS_IO_MUX, 0x105);
