@@ -135,6 +135,7 @@ char *_http_methods[] = {
 static
 char _http_buf[512];
 
+ICACHE_FLASH_ATTR
 int http_client_send_json_message(struct http_client *client, enum http_method method, const char *host, const char *resource,
         const char *message, size_t msg_len, on_response_func_t response)
 {
@@ -155,3 +156,4 @@ int http_client_send_json_message(struct http_client *client, enum http_method m
 
     return status;
 }
+
