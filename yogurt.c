@@ -340,8 +340,6 @@ void user_init(void)
     PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTCK_U, 2);
     /* HSPI CLK */
     PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTMS_U, 2);
-    /* MAX31855 Chip Select */
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
 
     /* Set up the SPI interface */
     spi_attr.bitOrder = SpiBitOrder_MSBFirst;
@@ -351,7 +349,7 @@ void user_init(void)
     SPIInit(SpiNum_HSPI, &spi_attr);
 
     /* Configure the chip select for the MAX31855 */
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
+    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO2_U, FUNC_GPIO2);
     gpio_output_set(0, 0, (1 << MAX31855_SPI_CSN), 0);
     gpio_output_set((1 << MAX31855_SPI_CSN), 0, 0, 0);
 
@@ -360,9 +358,8 @@ void user_init(void)
 
     /* Configure the chip selects for the SH1106 */
     PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO4_U, FUNC_GPIO4);    /* Chip select */
-    //PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO5_U, FUNC_GPIO5);    /* A0/Display Write Select */
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0RXD_U, FUNC_GPIO2);    /* A0/Display Write Select */
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0);    /* Display chip reset */
+    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO5_U, FUNC_GPIO5);    /* A0/Display Write Select */
+    PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);    /* Display chip reset */
 
     /* Enable the display control GPIOs and assert them, holding the display in reset */
     gpio_output_set(0, 0, (1 << SH1106_SPI_CSN) | (1 << SH1106_SPI_A0) | (1 << SH1106_SPI_RSTN), 0);
